@@ -2,24 +2,25 @@ import glob
 import subprocess as sp
 import os
 import sys
+import argparse
+import multiprocessing as mp
 
 
-ref_path = '/share/project2/felix/ncOrtho/mirgenedb/05cutoff/Homo_sapiens/data/Homo_sapiens.fa'
-n_path = '/share/project/felixl/ncOrtho/data/mirGeneDB/data/test.tsv'
-# n_path = '/share/project/felixl/ncOrtho/data/mirGeneDB/data/mirgenedb.tsv'
-# q_path = '/share/project2/felix/ncOrtho/mirgenedb/05cutoff/Homo_sapiens/data/Homo_sapiens.fa'
-q_path = '/share/project2/felix/ncOrtho/mirgenedb/05cutoff/Mus_musculus/data/Mus_musculus.fa'
-out_dir = '/share/project2/felix/ncOrtho/rbh_test'
-query_name = 'Mus_musculus'
-cpu = '4'
-dust = 'no'
-length_ratio = 0.7
+# ref_path = '/share/project2/felix/ncOrtho/mirgenedb/05cutoff/Homo_sapiens/data/Homo_sapiens.fa'
+# n_path = '/share/project/felixl/ncOrtho/data/mirGeneDB/data/test.tsv'
+# # n_path = '/share/project/felixl/ncOrtho/data/mirGeneDB/data/mirgenedb.tsv'
+# # q_path = '/share/project2/felix/ncOrtho/mirgenedb/05cutoff/Homo_sapiens/data/Homo_sapiens.fa'
+# q_path = '/share/project2/felix/ncOrtho/mirgenedb/05cutoff/Mus_musculus/data/Mus_musculus.fa'
+# out_dir = '/share/project2/felix/ncOrtho/rbh_test'
+# query_name = 'Mus_musculus'
+# cpu = '4'
+# dust = 'no'
+# length_ratio = 0.7
 
 
-# Central class of microRNA objects
 class Sequence(object):
     def __init__(self, name, chromosome, start, end, strand, seq):
-        # chromosome that the miRNA is located on
+        # chromosome
         if chromosome.startswith('chr'):
             self.chromosome = chromosome.split('chr')[1]
         else:
@@ -32,8 +33,9 @@ class Sequence(object):
         self.strand = strand
         # miRNA identifier
         self.name = name
-        # nucleotide sequence of the pre-miRNA
+        # nucleotide sequence, always as DNA not RNA
         self.seq = seq.replace('U', 'T')
+        self.seq = seq.replace('-', '')
 
 
 def check_blastdb(db_path):
@@ -53,22 +55,24 @@ def make_blastndb(inpath, outpath):
 
 def run_blast(seq, db, len_c, threads, dust_f='no'):
     blast_cmd = (
-        f'blastn -task blastn -num_threads "{threads}" -dust "{dust_f}" -db {db} -outfmt "6 saccver sstart send sstrand length sseq"'
+        'blastn -task blastn -num_threads "{}" -dust "{}" -db {} '
+        '-outfmt "6 saccver sstart send sstrand length sseq"'.format(threads, dust_f, db)
     )
     blast_call = sp.Popen(
         blast_cmd, shell=True, stdin=sp.PIPE,
         stdout=sp.PIPE, stderr=sp.PIPE, encoding='utf8'
     )
-    # remove hyphens from sequence
-    seq = seq.replace('-', '')
+
+    # run BLAST
     res, err = blast_call.communicate(seq)
     if err:
         print(f'ERROR: {err}')
         sys.exit()
     # parse BLASTn results
     for result in res.split('\n'):
-        # last line of results is empty, therefore skip
+        # last line of results is empty, therefore we need to skip empty rows
         if result:
+            # test for length
             length = int(result.split()[-2])
             if length >= len_c:
                 return result
@@ -98,10 +102,91 @@ def loc_check(mirna, hit):
         # No overlap
         else:
             return False
+    else:
+        return False
 
 
 def main():
-    # input checks
+    ##########################################################################
+    # Command line arguments
+    ##########################################################################
+    parser = argparse.ArgumentParser(
+        description='Perform reciprocal best BLAST hit search for reference miRNAs'
+    )
+    parser._action_groups.pop()
+    required = parser.add_argument_group('Required Arguments')
+    optional = parser.add_argument_group('Optional Arguments')
+    # covariance models folder
+    required.add_argument(
+        '-n', '--ncrna', metavar='<path>', type=str, required=True,
+        help='Path to a tab seperated file of reference miRNAs'
+    )
+    required.add_argument(
+        '-o', '--output', metavar='<path>', type=str, required=True,
+        help='Path to the output directory'
+    )
+    # query genome
+    required.add_argument(
+        '-q', '--query', metavar='<.fa>', type=str, required=True,
+        help='Path to query genome in FASTA format'
+    )
+    # reference genome
+    required.add_argument(
+        '-r', '--reference', metavar='<.fa>', type=str, required=True,
+        help='Path to reference genome in FASTA format'
+    )
+    ##########################################################################
+    # Optional Arguments
+    ##########################################################################
+    # query_name
+    optional.add_argument(
+        '--queryname', metavar='str', type=str, nargs='?', const='', default='',
+        help=(
+            'Name the output file'
+        )
+    )
+    # cpu, use maximum number of available cpus unless specified otherwise
+    optional.add_argument(
+        '--cpu', metavar='int', type=int,
+        help='Number of CPU cores to use (Default: all available)', nargs='?',
+        const=mp.cpu_count(), default=mp.cpu_count()
+    )
+    # length filter to prevent short hits
+    optional.add_argument(
+        '--minlength', metavar='float', type=float,
+        help='Reciprocal hit in the query species must have at '
+             'least the length of this value times the length of the refernce pre-miRNA (Default: No cutoff)',
+        nargs='?', const=0, default=0
+    )
+    # use dust filter?
+    parser.add_argument(
+        '--dust', metavar='yes/no', type=str,
+        help='Use BLASTn dust filter during re-BLAST.',
+        nargs='?',
+        const='no', default='no'
+    )
+    ##########################################################################
+    # Parse Arguments
+    ##########################################################################
+    # Show help when no arguments are added.
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+    else:
+        args = parser.parse_args()
+
+    ref_path = args.reference
+    n_path = args.ncrna
+    q_path = args.query
+    out_dir = args.output
+    query_name = args.queryname
+    cpu = args.cpu
+    dust = args.dust
+    length_ratio = ags.minlength
+
+    ##########################################################################
+    # Input checks
+    ##########################################################################
     if os.path.isfile(ref_path):
         if not check_blastdb(ref_path):
             print('# Making reference database')
@@ -118,6 +203,19 @@ def main():
         sys.exit()
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
+
+    # Check if computer provides the desired number of cores.
+    available_cpu = mp.cpu_count()
+    if cpu > available_cpu:
+        print(
+            '# Error: The provided number of CPU cores is higher than the '
+            'number available on this system. Exiting...'
+        )
+        sys.exit(1)
+
+    ##########################################################################
+    # Main algorithm
+    ##########################################################################
 
     print('# Reading miRNA information')
     mirna_dict = {}
@@ -161,7 +259,6 @@ def main():
                 continue
 
             hit = Sequence(mirid, hit_chrom, hit_start, hit_end, hit_strand, hit_seq)
-            hit.seq.replace('-', '')
 
             # check location of hit
             print(f'mirna: {mirna.start} - {mirna.end}')
