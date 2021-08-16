@@ -53,10 +53,10 @@ def make_blastndb(inpath, outpath):
     sp.call(db_command, shell=True)
 
 
-def run_blast(seq, db, len_c, threads, dust_f='no'):
+def run_blast(seq, db, len_c, threads, dust_f='no', evalue=10):
     blast_cmd = (
-        'blastn -task blastn -num_threads "{}" -dust "{}" -db {} '
-        '-outfmt "6 saccver sstart send sstrand length sseq"'.format(threads, dust_f, db)
+        'blastn -task blastn -num_threads "{}" -dust "{}" -db {} -evalue {} '
+        '-outfmt "6 saccver sstart send sstrand length sseq"'.format(threads, dust_f, db, evalue)
     )
     blast_call = sp.Popen(
         blast_cmd, shell=True, stdin=sp.PIPE,
@@ -158,6 +158,11 @@ def main():
              'least the length of this value times the length of the refernce pre-miRNA (Default: No cutoff)',
         nargs='?', const=0, default=0
     )
+    optional.add_argument(
+        '--evalue', metavar='float', type=float,
+        help='Minimum Expect value for BLAST hits (Default: 10)',
+        nargs='?', const=10, default=10
+    )
     # use dust filter?
     parser.add_argument(
         '--dust', metavar='yes/no', type=str,
@@ -182,7 +187,8 @@ def main():
     query_name = args.queryname
     cpu = args.cpu
     dust = args.dust
-    length_ratio = ags.minlength
+    length_ratio = args.minlength
+    exp = args.evalue
 
     ##########################################################################
     # Input checks
@@ -234,7 +240,7 @@ def main():
             length_cutoff = mirna_length * length_ratio
             # BLAST in query genome
             preseq = mirna_dict[mirid].seq
-            best_hit = run_blast(preseq, q_path, length_cutoff, cpu, dust)
+            best_hit = run_blast(preseq, q_path, length_cutoff, cpu, dust, exp)
             if best_hit:
                 hit_seq = best_hit.split()[-1]
             else:
@@ -242,7 +248,7 @@ def main():
                 continue
 
             # re-BLAST
-            best_rb = run_blast(hit_seq, ref_path, length_cutoff, cpu, dust)
+            best_rb = run_blast(hit_seq, ref_path, length_cutoff, cpu, dust, exp)
             if best_rb:
                 hit_chrom, hit_start, hit_end, hit_strand, hit_length, hit_seq = best_rb.split()
                 if hit_strand == 'plus':
