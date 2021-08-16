@@ -62,7 +62,7 @@ def run_blast(seq, db, len_c, threads, dust_f='no', evalue=10):
         blast_cmd, shell=True, stdin=sp.PIPE,
         stdout=sp.PIPE, stderr=sp.PIPE, encoding='utf8'
     )
-
+    seq = seq.replace('-', '')
     # run BLAST
     res, err = blast_call.communicate(seq)
     if err:
