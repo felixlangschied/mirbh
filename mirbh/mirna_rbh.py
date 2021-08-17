@@ -44,7 +44,7 @@ def make_blastndb(inpath, outpath):
 def run_blast(seq, db, len_c, threads, dust_f='no', evalue=10):
     blast_cmd = (
         'blastn -task blastn -num_threads "{}" -dust "{}" -db {} -evalue {} '
-        '-outfmt "6 saccver sstart send sstrand length sseq"'.format(threads, dust_f, db, evalue)
+        '-outfmt "6 saccver sstart send sstrand length bitscore sseq"'.format(threads, dust_f, db, evalue)
     )
     blast_call = sp.Popen(
         blast_cmd, shell=True, stdin=sp.PIPE,
@@ -61,7 +61,7 @@ def run_blast(seq, db, len_c, threads, dust_f='no', evalue=10):
         # last line of results is empty, therefore we need to skip empty rows
         if result:
             # test for length
-            length = int(result.split()[-2])
+            length = int(result.split()[-3])
             if length >= len_c:
                 return result
     print('No BLAST hit above length cutoff')
@@ -206,6 +206,8 @@ def main():
             'number available on this system. Exiting...'
         )
         sys.exit(1)
+    if not query_name:
+        query_name = q_path.split('/')[-1].split('.')[0]
 
     ##########################################################################
     # Main algorithm
@@ -238,7 +240,7 @@ def main():
             # re-BLAST
             best_rb = run_blast(hit_seq, ref_path, length_cutoff, cpu, dust, exp)
             if best_rb:
-                hit_chrom, hit_start, hit_end, hit_strand, hit_length, hit_seq = best_rb.split()
+                hit_chrom, hit_start, hit_end, hit_strand, hit_length, hit_bit, hit_seq = best_rb.split()
                 if hit_strand == 'plus':
                     hit_strand = '+'
                 elif hit_strand == 'minus':
@@ -259,7 +261,7 @@ def main():
             print(f'hit: {hit.start} - {hit.end}')
             if loc_check(mirna, hit):
                 print('CONFIRMED')
-                outstr = f'>{mirid}|{hit.chromosome}|{hit.start}|{hit.end}|{hit.strand}\n{hit.seq}\n'
+                outstr = f'>{query_name}|{mirid}|{hit.chromosome}|{hit.start}|{hit.end}|{hit.strand}|{hit_bit}\n{hit.seq}\n'
                 of.write(outstr)
             else:
                 print('REJECTED: Position of best re-BLAST hit does not overlap with reference')
