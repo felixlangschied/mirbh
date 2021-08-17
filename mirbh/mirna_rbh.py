@@ -6,18 +6,6 @@ import argparse
 import multiprocessing as mp
 
 
-# ref_path = '/share/project2/felix/ncOrtho/mirgenedb/05cutoff/Homo_sapiens/data/Homo_sapiens.fa'
-# n_path = '/share/project/felixl/ncOrtho/data/mirGeneDB/data/test.tsv'
-# # n_path = '/share/project/felixl/ncOrtho/data/mirGeneDB/data/mirgenedb.tsv'
-# # q_path = '/share/project2/felix/ncOrtho/mirgenedb/05cutoff/Homo_sapiens/data/Homo_sapiens.fa'
-# q_path = '/share/project2/felix/ncOrtho/mirgenedb/05cutoff/Mus_musculus/data/Mus_musculus.fa'
-# out_dir = '/share/project2/felix/ncOrtho/rbh_test'
-# query_name = 'Mus_musculus'
-# cpu = '4'
-# dust = 'no'
-# length_ratio = 0.7
-
-
 class Sequence(object):
     def __init__(self, name, chromosome, start, end, strand, seq):
         # chromosome
