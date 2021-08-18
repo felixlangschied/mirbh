@@ -41,10 +41,10 @@ def make_blastndb(inpath, outpath):
     sp.call(db_command, shell=True)
 
 
-def run_blast(seq, db, len_c, threads, dust_f='no', evalue=10):
+def run_blast(seq, db, threads, dust_f='no', evalue=10):
     blast_cmd = (
         'blastn -task blastn -num_threads "{}" -dust "{}" -db {} -evalue {} '
-        '-outfmt "6 saccver sstart send sstrand length bitscore sseq"'.format(threads, dust_f, db, evalue)
+        '-outfmt "6 saccver sstart send sstrand length sseq"'.format(threads, dust_f, db, evalue)
     )
     blast_call = sp.Popen(
         blast_cmd, shell=True, stdin=sp.PIPE,
@@ -60,10 +60,7 @@ def run_blast(seq, db, len_c, threads, dust_f='no', evalue=10):
     for result in res.split('\n'):
         # last line of results is empty, therefore we need to skip empty rows
         if result:
-            # test for length
-            length = int(result.split()[-3])
-            if length >= len_c:
-                return result
+            return result
     print('No BLAST hit above length cutoff')
     # best_hit = res.split('\n')[0]
     # return best_hit
@@ -144,7 +141,7 @@ def main():
         '--minlength', metavar='float', type=float,
         help='Reciprocal hit in the query species must have at '
              'least the length of this value times the length of the refernce pre-miRNA (Default: No cutoff)',
-        nargs='?', const=0, default=0
+        nargs='?', const=0.5, default=0.5
     )
     optional.add_argument(
         '--evalue', metavar='float', type=float,
@@ -221,8 +218,9 @@ def main():
             mirna_dict[name] = Sequence(name, chromosome, start, end, strand, pre)
     print('# Done')
 
-    outfile = f'{out_dir}/{query_name}.fa'
+    outfile = f'{out_dir}/{query_name}_orthologs.fa'
     with open(outfile, 'w') as of:
+        # determine distribution of miRNA length
         for mirid in mirna_dict:
             print(f'### {mirid}')
             mirna = mirna_dict[mirid]
@@ -230,7 +228,7 @@ def main():
             length_cutoff = mirna_length * length_ratio
             # BLAST in query genome
             preseq = mirna_dict[mirid].seq
-            best_hit = run_blast(preseq, q_path, length_cutoff, cpu, dust, exp)
+            best_hit = run_blast(preseq, q_path, cpu, dust, exp)
             if best_hit:
                 hit_seq = best_hit.split()[-1]
             else:
@@ -238,9 +236,12 @@ def main():
                 continue
 
             # re-BLAST
-            best_rb = run_blast(hit_seq, ref_path, length_cutoff, cpu, dust, exp)
+            best_rb = run_blast(hit_seq, ref_path, cpu, dust, exp)
             if best_rb:
-                hit_chrom, hit_start, hit_end, hit_strand, hit_length, hit_bit, hit_seq = best_rb.split()
+                hit_chrom, hit_start, hit_end, hit_strand, hit_length, hit_seq = best_rb.split()
+                if int(hit_length) < length_cutoff:
+                    print(f'REJECTED: Best re-BLAST hit of {mirid} below length threshold')
+                    continue
                 if hit_strand == 'plus':
                     hit_strand = '+'
                 elif hit_strand == 'minus':
@@ -249,7 +250,6 @@ def main():
                     tmp = hit_start
                     hit_start = hit_end
                     hit_end = tmp
-
             else:
                 print(f're-BLAST of {mirid} yielded no results')
                 continue
@@ -261,7 +261,7 @@ def main():
             print(f'hit: {hit.start} - {hit.end}')
             if loc_check(mirna, hit):
                 print('CONFIRMED')
-                outstr = f'>{query_name}|{mirid}|{hit.chromosome}|{hit.start}|{hit.end}|{hit.strand}|{hit_bit}\n{hit.seq}\n'
+                outstr = f'>{query_name}|{mirid}|{hit.chromosome}|{hit.start}|{hit.end}|{hit.strand}\n{hit.seq}\n'
                 of.write(outstr)
             else:
                 print('REJECTED: Position of best re-BLAST hit does not overlap with reference')
