@@ -140,7 +140,7 @@ def main():
     optional.add_argument(
         '--minlength', metavar='float', type=float,
         help='Reciprocal hit in the query species must have at '
-             'least the length of this value times the length of the refernce pre-miRNA (Default: No cutoff)',
+             'least the length of this value times the length of the refernce pre-miRNA (Default: 0.5)',
         nargs='?', const=0.5, default=0.5
     )
     optional.add_argument(
