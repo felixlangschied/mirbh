@@ -209,6 +209,7 @@ def main():
     ##########################################################################
     # Main algorithm
     ##########################################################################
+    print(f'### Starting miRBH for {query_name}')
 
     print('# Reading miRNA information')
     mirna_dict = {}
@@ -265,7 +266,7 @@ def main():
                 of.write(outstr)
             else:
                 print('REJECTED: Position of best re-BLAST hit does not overlap with reference')
-
+    print(f'### miRBH finished')
 
 if __name__ == "__main__":
     main()
